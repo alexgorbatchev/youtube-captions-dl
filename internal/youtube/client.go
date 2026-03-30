@@ -25,6 +25,8 @@ var (
 	consentURLPattern   = regexp.MustCompile(`https://consent\.youtube\.com/s`)
 	consentValuePattern = regexp.MustCompile(`name="v" value="(.*?)"`)
 	apiKeyPattern       = regexp.MustCompile(`"INNERTUBE_API_KEY":\s*"([A-Za-z0-9_-]+)"`)
+	ogTitlePattern      = regexp.MustCompile(`(?i)<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']`)
+	titleTagPattern     = regexp.MustCompile(`(?is)<title>(.*?)</title>`)
 	stripTagsPattern    = regexp.MustCompile(`(?i)<[^>]*>`)
 )
 
@@ -123,6 +125,11 @@ func (c *Client) FetchPlainText(ctx context.Context, videoID string) (string, er
 		return "", fmt.Errorf("fetching watch page for %s: %w", videoID, err)
 	}
 
+	videoTitle, err := extractVideoTitle(watchBody)
+	if err != nil {
+		return "", fmt.Errorf("extracting video title for %s: %w", videoID, err)
+	}
+
 	apiKey, err := extractInnertubeAPIKey(watchBody)
 	if err != nil {
 		return "", fmt.Errorf("extracting Innertube API key for %s: %w", videoID, err)
@@ -152,7 +159,7 @@ func (c *Client) FetchPlainText(ctx context.Context, videoID string) (string, er
 		return "", fmt.Errorf("captions were available for %s but the transcript body was empty", videoID)
 	}
 
-	return plainText, nil
+	return formatPlainTextOutput(videoTitle, plainText), nil
 }
 
 func (c *Client) fetchWatchPage(ctx context.Context, videoID string) ([]byte, *http.Cookie, error) {
@@ -274,6 +281,28 @@ func cleanCaptionText(raw string) string {
 	cleaned = html.UnescapeString(cleaned)
 	fields := strings.Fields(cleaned)
 	return strings.Join(fields, " ")
+}
+
+func extractVideoTitle(watchBody []byte) (string, error) {
+	for _, pattern := range []*regexp.Regexp{ogTitlePattern, titleTagPattern} {
+		match := pattern.FindSubmatch(watchBody)
+		if len(match) != 2 {
+			continue
+		}
+
+		title := html.UnescapeString(string(match[1]))
+		title = strings.TrimSpace(title)
+		title = strings.TrimSuffix(title, " - YouTube")
+		if title != "" {
+			return title, nil
+		}
+	}
+
+	return "", fmt.Errorf("video title was not present in the watch page")
+}
+
+func formatPlainTextOutput(videoTitle string, plainText string) string {
+	return strings.Join([]string{videoTitle, "---", plainText}, "\n")
 }
 
 func extractInnertubeAPIKey(watchBody []byte) (string, error) {

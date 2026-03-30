@@ -7,7 +7,10 @@ import (
 	"path/filepath"
 )
 
-const appName = "youtube-captions-dl"
+const (
+	appName         = "youtube-captions-dl"
+	cacheFileSuffix = ".v2.txt"
+)
 
 type Store struct {
 	dir string
@@ -88,5 +91,5 @@ func resolveDir() (string, error) {
 }
 
 func (s *Store) path(videoID string) string {
-	return filepath.Join(s.dir, videoID+".txt")
+	return filepath.Join(s.dir, videoID+cacheFileSuffix)
 }

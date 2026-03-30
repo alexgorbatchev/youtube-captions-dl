@@ -102,6 +102,45 @@ func TestParseTranscriptPlainText(t *testing.T) {
 	}
 }
 
+func TestExtractVideoTitle(t *testing.T) {
+	tests := []struct {
+		name      string
+		watchBody string
+		want      string
+	}{
+		{
+			name:      "og title",
+			watchBody: `<html><head><meta property="og:title" content="Talk &amp; Demo"></head></html>`,
+			want:      "Talk & Demo",
+		},
+		{
+			name:      "title tag fallback",
+			watchBody: `<html><head><title>My Video - YouTube</title></head></html>`,
+			want:      "My Video",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := extractVideoTitle([]byte(tt.watchBody))
+			if err != nil {
+				t.Fatalf("extractVideoTitle() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("extractVideoTitle() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFormatPlainTextOutput(t *testing.T) {
+	got := formatPlainTextOutput("Video Title", "line one\nline two")
+	want := "Video Title\n---\nline one\nline two"
+	if got != want {
+		t.Fatalf("formatPlainTextOutput() = %q, want %q", got, want)
+	}
+}
+
 func TestTranscriptURLRemovesFmtParameter(t *testing.T) {
 	got, err := transcriptURL("https://example.com/api?lang=en&fmt=srv3&foo=bar")
 	if err != nil {

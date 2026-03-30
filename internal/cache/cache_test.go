@@ -42,3 +42,13 @@ func TestResolveDirRejectsRelativeXDGCacheHome(t *testing.T) {
 		t.Fatal("resolveDir() error = nil, want error")
 	}
 }
+
+func TestStorePathUsesCurrentCacheFormat(t *testing.T) {
+	store := &Store{dir: "/tmp/cache"}
+
+	got := store.path("tG1CSRaJhKQ")
+	want := filepath.Join("/tmp/cache", "tG1CSRaJhKQ"+cacheFileSuffix)
+	if got != want {
+		t.Fatalf("store.path() = %q, want %q", got, want)
+	}
+}

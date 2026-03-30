@@ -1,11 +1,13 @@
 # youtube-captions-dl
 
-A small CLI utility that prints YouTube captions as plain text to stdout.
+A small CLI utility that prints a YouTube title header followed by captions as plain text to stdout.
 
 ## Behavior
 
 - accepts exactly one argument: a YouTube URL
-- prints only caption text to stdout
+- prints the video title on the first line
+- prints `---` on the second line
+- prints caption text after the separator
 - removes timestamps and inline formatting
 - prefers a human-created caption track when available
 - falls back to the first auto-generated caption track
