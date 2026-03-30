@@ -7,7 +7,7 @@ builds:
     main: .
     binary: youtube-captions-dl
     ldflags:
-      - -s -w
+      - -s -w -X main.version={{.Version}}
     goos:
       - darwin
       - linux
