@@ -9,7 +9,7 @@ import (
 
 const (
 	appName         = "youtube-captions-dl"
-	cacheFileSuffix = ".v2.txt"
+	cacheFileSuffix = ".v8.txt"
 )
 
 type Store struct {

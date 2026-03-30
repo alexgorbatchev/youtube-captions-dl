@@ -7,7 +7,8 @@ A small CLI utility that prints a YouTube title header followed by captions as p
 - accepts exactly one argument: a YouTube URL
 - prints the video title on the first line
 - prints `---` on the second line
-- prints caption text after the separator
+- prints caption text after the separator, wrapping to 80 columns while keeping
+  speaker and bracketed sound cues on their own lines
 - removes timestamps and inline formatting
 - prefers a human-created caption track when available
 - falls back to the first auto-generated caption track

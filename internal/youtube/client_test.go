@@ -86,9 +86,13 @@ func TestChooseCaptionTrackPrefersManualTracks(t *testing.T) {
 
 func TestParseTranscriptPlainText(t *testing.T) {
 	transcript := []byte(`<transcript>
-		<text start="0" dur="1.2">Hello &amp; welcome</text>
-		<text start="1.2" dur="1.1">This is &lt;i&gt;formatted&lt;/i&gt; text</text>
-		<text start="2.3" dur="0.8">   </text>
+		<text start="0" dur="0.5">Hello &amp; welcome</text>
+		<text start="0.6" dur="0.5">This is &lt;i&gt;formatted&lt;/i&gt; text</text>
+		<text start="2.2" dur="0.5">&amp;gt;&amp;gt; Speaker line one.</text>
+		<text start="2.8" dur="0.4">Still the same speaker.</text>
+		<text start="3.2" dur="0.4">[applause]</text>
+		<text start="3.6" dur="0.4">[cheering]</text>
+		<text start="4.0" dur="0.4">Back to normal text.</text>
 	</transcript>`)
 
 	got, err := parseTranscriptPlainText(transcript)
@@ -96,9 +100,39 @@ func TestParseTranscriptPlainText(t *testing.T) {
 		t.Fatalf("parseTranscriptPlainText() error = %v", err)
 	}
 
-	want := "Hello & welcome\nThis is formatted text"
+	want := "Hello & welcome This is formatted text\n" +
+		">> Speaker line one. Still the same speaker.\n" +
+		"[applause]\n[cheering]\n" +
+		"Back to normal text."
 	if got != want {
 		t.Fatalf("parseTranscriptPlainText() = %q, want %q", got, want)
+	}
+}
+
+func TestFormatCaptionLines(t *testing.T) {
+	lines := []string{
+		">> I thought you were going to make me grab",
+		"one of the chairs, too, so I was",
+		"preparing. Um,",
+		"[applause]",
+	}
+
+	got := formatCaptionLines(lines, 60)
+	want := ">> I thought you were going to make me grab one of the\n" +
+		"chairs, too, so I was preparing. Um,\n" +
+		"[applause]"
+	if got != want {
+		t.Fatalf("formatCaptionLines() = %q, want %q", got, want)
+	}
+}
+
+func TestWrapLine(t *testing.T) {
+	line := ">> I thought you were going to make me grab one of the chairs, too, so I was preparing."
+
+	got := wrapLine(line, 40)
+	want := ">> I thought you were going to make me\ngrab one of the chairs, too, so I was\npreparing."
+	if got != want {
+		t.Fatalf("wrapLine() = %q, want %q", got, want)
 	}
 }
 

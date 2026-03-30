@@ -18,6 +18,7 @@ import (
 const (
 	watchURLFormat     = "https://www.youtube.com/watch?v=%s"
 	innertubeURLFormat = "https://www.youtube.com/youtubei/v1/player?key=%s"
+	wrapWidth          = 80
 )
 
 var (
@@ -63,6 +64,19 @@ type transcriptDocument struct {
 
 type transcriptEntry struct {
 	Text string `xml:",chardata"`
+}
+
+type cueSegmentKind int
+
+const (
+	cueSegmentParagraph cueSegmentKind = iota
+	cueSegmentSpeaker
+	cueSegmentBracket
+)
+
+type cueSegment struct {
+	kind cueSegmentKind
+	text string
 }
 
 func NewClient(httpClient *http.Client) *Client {
@@ -269,10 +283,11 @@ func parseTranscriptPlainText(transcriptBody []byte) (string, error) {
 		if line == "" {
 			continue
 		}
+
 		lines = append(lines, line)
 	}
 
-	return strings.Join(lines, "\n"), nil
+	return formatCaptionLines(lines, wrapWidth), nil
 }
 
 func cleanCaptionText(raw string) string {
@@ -303,6 +318,82 @@ func extractVideoTitle(watchBody []byte) (string, error) {
 
 func formatPlainTextOutput(videoTitle string, plainText string) string {
 	return strings.Join([]string{videoTitle, "---", plainText}, "\n")
+}
+
+func formatCaptionLines(lines []string, width int) string {
+	segments := buildCueSegments(lines)
+	formatted := make([]string, 0, len(segments))
+	for _, segment := range segments {
+		formatted = append(formatted, wrapLine(segment.text, width))
+	}
+
+	return strings.Join(formatted, "\n")
+}
+
+func buildCueSegments(lines []string) []cueSegment {
+	segments := make([]cueSegment, 0, len(lines))
+	for _, line := range lines {
+		kind := classifyCue(line)
+		if len(segments) == 0 {
+			segments = append(segments, cueSegment{kind: kind, text: line})
+			continue
+		}
+
+		last := &segments[len(segments)-1]
+		switch kind {
+		case cueSegmentBracket:
+			segments = append(segments, cueSegment{kind: kind, text: line})
+		case cueSegmentSpeaker:
+			segments = append(segments, cueSegment{kind: kind, text: line})
+		case cueSegmentParagraph:
+			if last.kind == cueSegmentBracket {
+				segments = append(segments, cueSegment{kind: kind, text: line})
+				continue
+			}
+			last.text += " " + line
+		}
+	}
+
+	return segments
+}
+
+func classifyCue(line string) cueSegmentKind {
+	trimmed := strings.TrimSpace(line)
+	if strings.HasPrefix(trimmed, ">>") {
+		return cueSegmentSpeaker
+	}
+	if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+		return cueSegmentBracket
+	}
+
+	return cueSegmentParagraph
+}
+
+func wrapLine(line string, width int) string {
+	if width <= 0 {
+		return strings.TrimSpace(line)
+	}
+
+	words := strings.Fields(line)
+	if len(words) == 0 {
+		return ""
+	}
+
+	lines := make([]string, 0, len(words))
+	currentLine := words[0]
+	for _, word := range words[1:] {
+		candidate := currentLine + " " + word
+		if len(candidate) <= width {
+			currentLine = candidate
+			continue
+		}
+
+		lines = append(lines, currentLine)
+		currentLine = word
+	}
+
+	lines = append(lines, currentLine)
+	return strings.Join(lines, "\n")
 }
 
 func extractInnertubeAPIKey(watchBody []byte) (string, error) {
