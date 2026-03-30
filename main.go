@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -13,9 +14,17 @@ import (
 	"github.com/alexgorbatchev/youtube-captions-dl/internal/youtube"
 )
 
-const requestTimeout = 30 * time.Second
+const (
+	requestTimeout = 30 * time.Second
+	description    = "Download YouTube captions and print plain text to stdout."
+)
 
-var errUsage = errors.New("usage")
+var (
+	errUsage   = errors.New("usage")
+	errHelp    = errors.New("help")
+	errVersion = errors.New("version")
+	version    = "dev"
+)
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -23,8 +32,16 @@ func main() {
 
 func run(args []string, stdout io.Writer, stderr io.Writer) int {
 	if err := runMain(args, stdout, stderr); err != nil {
+		if errors.Is(err, errHelp) {
+			writeHelp(stdout)
+			return 0
+		}
+		if errors.Is(err, errVersion) {
+			writeVersion(stdout)
+			return 0
+		}
 		if errors.Is(err, errUsage) {
-			writeDiagnosticf(stderr, "usage: %s <youtube-url>\n", os.Args[0])
+			writeHelp(stderr)
 			return 2
 		}
 
@@ -36,6 +53,14 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 }
 
 func runMain(args []string, stdout io.Writer, stderr io.Writer) error {
+	if len(args) == 1 {
+		if isHelpFlag(args[0]) {
+			return errHelp
+		}
+		if isVersionFlag(args[0]) {
+			return errVersion
+		}
+	}
 	if len(args) != 1 {
 		return errUsage
 	}
@@ -71,6 +96,37 @@ func runMain(args []string, stdout io.Writer, stderr io.Writer) error {
 	}
 
 	return writePlainText(stdout, plainText)
+}
+
+func isHelpFlag(arg string) bool {
+	return arg == "-h" || arg == "--help"
+}
+
+func isVersionFlag(arg string) bool {
+	switch arg {
+	case "--version", "-version", "version":
+		return true
+	default:
+		return false
+	}
+}
+
+func writeHelp(w io.Writer) {
+	writeDiagnosticf(w, "%s\n\n", description)
+	writeDiagnosticf(w, "usage:\n")
+	writeDiagnosticf(w, "  %s <youtube-url>\n\n", programName())
+	writeDiagnosticf(w, "flags:\n")
+	writeDiagnosticf(w, "  -h, --help              Show help\n")
+	writeDiagnosticf(w, "  --version, -version     Show version\n")
+	writeDiagnosticf(w, "  version                 Show version\n")
+}
+
+func writeVersion(w io.Writer) {
+	writeDiagnosticf(w, "%s %s\n", programName(), version)
+}
+
+func programName() string {
+	return filepath.Base(os.Args[0])
 }
 
 func writeDiagnosticf(w io.Writer, format string, args ...any) {
