@@ -29,5 +29,5 @@ verify:
     go test -race ./...
     golangci-lint run ./...
 
-run url: build
-    ./bin/{{binary}} '{{url}}'
+run *args: build
+    ./bin/{{binary}} {{args}}
