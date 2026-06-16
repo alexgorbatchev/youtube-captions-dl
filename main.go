@@ -2,16 +2,15 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/alexgorbatchev/youtube-captions-dl/internal/cache"
 	"github.com/alexgorbatchev/youtube-captions-dl/internal/youtube"
+	"github.com/spf13/cobra"
 )
 
 const (
@@ -20,10 +19,7 @@ const (
 )
 
 var (
-	errUsage   = errors.New("usage")
-	errHelp    = errors.New("help")
-	errVersion = errors.New("version")
-	version    = "dev"
+	version = "dev"
 )
 
 func main() {
@@ -31,108 +27,72 @@ func main() {
 }
 
 func run(args []string, stdout io.Writer, stderr io.Writer) int {
-	if err := runMain(args, stdout, stderr); err != nil {
-		if errors.Is(err, errHelp) {
-			writeHelp(stdout)
-			return 0
-		}
-		if errors.Is(err, errVersion) {
-			writeVersion(stdout)
-			return 0
-		}
-		if errors.Is(err, errUsage) {
-			writeHelp(stderr)
-			return 2
-		}
+	var runECalled bool
 
-		writeDiagnosticf(stderr, "error: %v\n", err)
-		return 1
+	cmd := newRootCmd(stdout, stderr, &runECalled)
+	cmd.SetArgs(args)
+	if err := cmd.Execute(); err != nil {
+		if runECalled {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		cmd.SetOut(stderr)
+		_ = cmd.Help()
+		return 2
 	}
-
 	return 0
 }
 
-func runMain(args []string, stdout io.Writer, stderr io.Writer) error {
-	if len(args) == 1 {
-		if isHelpFlag(args[0]) {
-			return errHelp
-		}
-		if isVersionFlag(args[0]) {
-			return errVersion
-		}
+func newRootCmd(stdout, stderr io.Writer, runECalled *bool) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:           "youtube-captions-dl <youtube-url>",
+		Short:         description,
+		Args:          cobra.ExactArgs(1),
+		Version:       version,
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			*runECalled = true
+
+			videoID, err := youtube.ParseVideoID(args[0])
+			if err != nil {
+				return fmt.Errorf("parsing video URL: %w", err)
+			}
+
+			store, err := cache.NewStore()
+			if err != nil {
+				return fmt.Errorf("creating cache store: %w", err)
+			}
+
+			cachedText, ok, err := store.Load(videoID)
+			if err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: reading cache failed: %v\n", err)
+			} else if ok {
+				return writePlainText(cmd.OutOrStdout(), cachedText)
+			}
+
+			ctx, cancel := context.WithTimeout(cmd.Context(), requestTimeout)
+			defer cancel()
+
+			client := youtube.NewClient(nil)
+			plainText, err := client.FetchPlainText(ctx, videoID)
+			if err != nil {
+				return err
+			}
+
+			if err := store.Save(videoID, plainText); err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: writing cache failed: %v\n", err)
+			}
+
+			return writePlainText(cmd.OutOrStdout(), plainText)
+		},
 	}
-	if len(args) != 1 {
-		return errUsage
-	}
 
-	videoID, err := youtube.ParseVideoID(args[0])
-	if err != nil {
-		return fmt.Errorf("parsing video URL: %w", err)
-	}
+	cmd.SetOut(stdout)
+	cmd.SetErr(stderr)
 
-	store, err := cache.NewStore()
-	if err != nil {
-		return fmt.Errorf("creating cache store: %w", err)
-	}
-
-	cachedText, ok, err := store.Load(videoID)
-	if err != nil {
-		writeDiagnosticf(stderr, "warning: reading cache failed: %v\n", err)
-	} else if ok {
-		return writePlainText(stdout, cachedText)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
-	defer cancel()
-
-	client := youtube.NewClient(nil)
-	plainText, err := client.FetchPlainText(ctx, videoID)
-	if err != nil {
-		return err
-	}
-
-	if err := store.Save(videoID, plainText); err != nil {
-		writeDiagnosticf(stderr, "warning: writing cache failed: %v\n", err)
-	}
-
-	return writePlainText(stdout, plainText)
-}
-
-func isHelpFlag(arg string) bool {
-	return arg == "-h" || arg == "--help"
-}
-
-func isVersionFlag(arg string) bool {
-	switch arg {
-	case "--version", "-version", "version":
-		return true
-	default:
-		return false
-	}
-}
-
-func writeHelp(w io.Writer) {
-	writeDiagnosticf(w, "%s\n\n", description)
-	writeDiagnosticf(w, "usage:\n")
-	writeDiagnosticf(w, "  %s <youtube-url>\n\n", programName())
-	writeDiagnosticf(w, "flags:\n")
-	writeDiagnosticf(w, "  -h, --help              Show help\n")
-	writeDiagnosticf(w, "  --version, -version     Show version\n")
-	writeDiagnosticf(w, "  version                 Show version\n")
-}
-
-func writeVersion(w io.Writer) {
-	writeDiagnosticf(w, "%s %s\n", programName(), version)
-}
-
-func programName() string {
-	return filepath.Base(os.Args[0])
-}
-
-func writeDiagnosticf(w io.Writer, format string, args ...any) {
-	if _, err := fmt.Fprintf(w, format, args...); err != nil {
-		return
-	}
+	return cmd
 }
 
 func writePlainText(w io.Writer, text string) error {
