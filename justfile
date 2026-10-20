@@ -5,7 +5,7 @@ default:
 
 build:
     mkdir -p bin
-    go build -o bin/{{binary}} .
+    go build -o bin/{{ binary }} .
 
 test:
     go test ./...
@@ -30,4 +30,8 @@ verify:
     golangci-lint run ./...
 
 run *args: build
-    ./bin/{{binary}} {{args}}
+    ./bin/{{ binary }} {{ args }}
+
+# Download project dependencies for local development
+setup:
+    go mod download
